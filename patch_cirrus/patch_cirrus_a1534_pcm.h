@@ -99,6 +99,67 @@ static int cs_4208_playback_pcm_open(struct hda_pcm_stream *hinfo,
 	return 0;
 }
 
+static int cs_4208_capture_pcm_open(struct hda_pcm_stream *hinfo,
+				     struct hda_codec *codec,
+				     struct snd_pcm_substream *substream)
+{
+	codec_dbg(codec, "cs_4208_capture_pcm_open start");
+
+	/* Enable internal mic pin (0x19) with IN */
+	snd_hda_set_pin_ctl(codec, 0x19, PIN_IN);
+
+	/* Boost internal mic pin amp to max (step 2 of 0-2, ~20dB) */
+	snd_hda_codec_amp_stereo(codec, 0x19, HDA_INPUT, 0, 0xff, 0x02);
+
+	/* Select input index 2 (0x19) on ADC 0x06 */
+	snd_hda_codec_write(codec, 0x06, 0, AC_VERB_SET_CONNECT_SEL, 2);
+
+	/* Unmute ADC 0x06 input amp at index 2 and set to 0dB (0x33 = offset) */
+	snd_hda_codec_amp_stereo(codec, 0x06, HDA_INPUT, 2, 0xff, 0x33);
+
+	/* Power on the ADC */
+	snd_hda_codec_write(codec, 0x06, 0, AC_VERB_SET_POWER_STATE, 0x00);
+
+	codec_dbg(codec, "cs_4208_capture_pcm_open end");
+	return 0;
+}
+
+static int cs_4208_capture_pcm_prepare(struct hda_pcm_stream *hinfo,
+					struct hda_codec *codec,
+					unsigned int stream_tag,
+					unsigned int format,
+					struct snd_pcm_substream *substream)
+{
+	codec_dbg(codec, "cs_4208_capture_pcm_prepare start");
+	snd_hda_codec_setup_stream(codec, hinfo->nid, stream_tag, 0, format);
+	codec_dbg(codec, "cs_4208_capture_pcm_prepare end");
+	return 0;
+}
+
+static int cs_4208_capture_pcm_cleanup(struct hda_pcm_stream *hinfo,
+					struct hda_codec *codec,
+					struct snd_pcm_substream *substream)
+{
+	codec_dbg(codec, "cs_4208_capture_pcm_cleanup start");
+	snd_hda_codec_cleanup_stream(codec, hinfo->nid);
+	codec_dbg(codec, "cs_4208_capture_pcm_cleanup end");
+	return 0;
+}
+
+static const struct hda_pcm_stream cs4208_pcm_analog_capture = {
+	.substreams = 1,
+	.channels_min = 1,
+	.channels_max = 2,
+	.rates = SNDRV_PCM_RATE_8000_96000,
+	.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S32_LE,
+	.maxbps = 32,
+	.ops = {
+		.open = cs_4208_capture_pcm_open,
+		.prepare = cs_4208_capture_pcm_prepare,
+		.cleanup = cs_4208_capture_pcm_cleanup,
+	},
+};
+
 static const struct hda_pcm_stream cs4208_pcm_analog_playback = {
 	.substreams = 1,
 	.channels_min = 2,
@@ -273,6 +334,9 @@ int cs_4208_build_pcms_explicit(struct hda_codec *codec)
 	info->stream[SNDRV_PCM_STREAM_PLAYBACK] = cs4208_pcm_analog_playback;
 	info->stream[SNDRV_PCM_STREAM_PLAYBACK].nid = 0x04; // 0x04 is for speakers 0x02 is for headphones
 	info->stream[SNDRV_PCM_STREAM_PLAYBACK].channels_max = 4;
+
+	info->stream[SNDRV_PCM_STREAM_CAPTURE] = cs4208_pcm_analog_capture;
+	info->stream[SNDRV_PCM_STREAM_CAPTURE].nid = 0x06; /* ADC connected to internal mic 0x19 */
 
 	info->pcm_type = HDA_PCM_TYPE_AUDIO;
 
