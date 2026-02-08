@@ -95,11 +95,15 @@ if [ $major_minor -lt 56 ]; then
    sed -i 's/ktime_get_real_ts64/getnstimeofday/' $hda_dir/patch_cirrus_a1534_pcm.h
 fi
 
-update_dir="/lib/modules/$(uname -r)/updates"
-[[ ! -d $update_dir ]] && mkdir $update_dir
-if ((${#dkms_kernel[@]})); then
+# if called from dkms (with -k), just set up build tree and exit
+# dkms will handle building and installing via MAKE directive
+if [[ -n $dkms_kernel ]]; then
     cp $makefile_name Makefile
+    exit 0
 fi
+
+update_dir="/lib/modules/$uname_r/updates"
+[[ ! -d $update_dir ]] && mkdir $update_dir
 make -f $makefile_name
 make -f $makefile_name install
 echo -e "\ncontents of $update_dir"

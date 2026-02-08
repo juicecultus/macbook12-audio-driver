@@ -300,8 +300,6 @@ void cs_4208_jack_unsol_event(struct hda_codec *codec, unsigned int res)
 }
 */
 
-#define cs_4208_free            snd_hda_gen_free
-
 static int cs_4208_init_explicit(struct hda_codec *codec)
 {
 	//struct cs_spec *spec = codec->spec;

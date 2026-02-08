@@ -8,6 +8,7 @@
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/ctype.h>
 #include <sound/core.h>
 #include <linux/pci.h>
 #include <sound/tlv.h>
