@@ -306,7 +306,15 @@ void cs_4208_playback_pcm_hook(struct hda_pcm_stream *hinfo, struct hda_codec *c
 
 static int cs_4208_build_controls_explicit(struct hda_codec *codec)
 {
+	int retval;
+
 	codec_dbg(codec, "cs_4208_build_controls_explicit start");
+
+	/* Restore generic ALSA HDA controls, including capture/input controls. */
+	retval = snd_hda_gen_build_controls(codec);
+	if (retval < 0)
+		return retval;
+
 	codec_dbg(codec, "cs_4208_build_controls_explicit end");
 	return 0;
 }
@@ -321,15 +329,20 @@ int cs_4208_build_pcms_explicit(struct hda_codec *codec)
 
 	codec_dbg(codec, "cs_4208_build_pcms_explicit start");
 
-	//retval =  snd_hda_gen_build_pcms(codec);
+	/* Let generic HDA build playback + capture PCMs first.  The old A1534
+	 * explicit path manually created only playback, which made ALSA expose no
+	 * capture device even though the codec parser saw Mic=0x18/Internal Mic=0x19.
+	 */
+	retval = snd_hda_gen_build_pcms(codec);
+	if (retval < 0)
+		return retval;
 
 	cs_4208_fill_pcm_stream_name(gen_spec->stream_name_analog,
 					sizeof(gen_spec->stream_name_analog),
 					" Analog", codec->core.chip_name);
-	info = snd_hda_codec_pcm_new(codec, "%s", gen_spec->stream_name_analog);
+	info = gen_spec->pcm_rec[0];
 	if (!info)
 		return -ENOMEM;
-	gen_spec->pcm_rec[0] = info;
 
 	info->stream[SNDRV_PCM_STREAM_PLAYBACK] = cs4208_pcm_analog_playback;
 	info->stream[SNDRV_PCM_STREAM_PLAYBACK].nid = 0x04; // 0x04 is for speakers 0x02 is for headphones
@@ -339,8 +352,6 @@ int cs_4208_build_pcms_explicit(struct hda_codec *codec)
 	info->stream[SNDRV_PCM_STREAM_CAPTURE].nid = 0x06; /* ADC connected to internal mic 0x19 */
 
 	info->pcm_type = HDA_PCM_TYPE_AUDIO;
-
-	retval = 0;
 
 	codec_dbg(codec, "cs_4208_build_pcms_explicit end");
 	return retval;
@@ -366,10 +377,16 @@ void cs_4208_jack_unsol_event(struct hda_codec *codec, unsigned int res)
 
 static int cs_4208_init_explicit(struct hda_codec *codec)
 {
-	//struct cs_spec *spec = codec->spec;
-	codec_dbg(codec, "cs_4208_init_explicit start");
-	codec_dbg(codec, "cs_4208_init_explicit end");
+	int retval;
 
+	codec_dbg(codec, "cs_4208_init_explicit start");
+
+	/* Restore generic init so ADC muxes, mic pins, and capture amps are set. */
+	retval = snd_hda_gen_init(codec);
+	if (retval < 0)
+		return retval;
+
+	codec_dbg(codec, "cs_4208_init_explicit end");
 	return 0;
 }
 
