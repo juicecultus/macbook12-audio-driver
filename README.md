@@ -1,144 +1,66 @@
-# macbook12-audio-driver
+# Driver de áudio do MacBook 12" — CS4208 — versão 0.5.5-rev3
 
-WIP audio driver for the CS4208 codec found in the 12" MacBook (MacBook9,1, MacBook10,1), compiling on kernels 5.0+, including 6.17+.
+Este pacote integra a implementação funcional de referência para o Cirrus Logic CS4208 do MacBook9,1/MacBook10,1 (A1534). Diferentemente do pacote anterior, ele substitui o codec Cirrus correspondente do stack HDA por uma versão adaptada que inicializa o amplificador dos alto-falantes internos, mantém o caminho analógico do fone, alterna por jack sensing e recompila o codec contra a árvore exata do kernel alvo via DKMS.
 
-Based on davidjo's [snd_hda_macbookpro](https://github.com/davidjo/snd_hda_macbookpro) and the original [leifliddy/macbook12-audio-driver](https://github.com/leifliddy/macbook12-audio-driver).
+## Importante
 
-> **This driver is experimental. Use at your own risk.**
+Este é um driver experimental de baixo nível. A compilação e a instalação podem ser validadas fora do aparelho, mas o som físico, a troca automática, o volume, o suspend/resume e a ausência de ruído só podem ser confirmados no MacBook10,1 real. Não instale junto com o módulo identificador `macbook12_audio` da versão 0.4.x.
 
-## Supported Hardware
+## Hardware confirmado
 
-| Model | Identifier | Status |
-|---|---|---|
-| MacBook 12" (2016) | MacBook9,1 | Supported |
-| MacBook 12" (2017) | MacBook10,1 | Supported |
-| MacBook 12" (2015) | MacBook8,1 | **Not supported** |
+- DMI: `MacBook10,1`;
+- codec: CS4208, subsystem `106b:6600`;
+- fone: conversor `0x02` → pin `0x10`;
+- alto-falante: conversor digital `0x0a` → pin `0x1d`;
+- controlador HDA: Intel `8086:9d71`, subsystem `8086:7270`.
 
-## Supported Kernels
+## Instalação no Mint 22.3 / kernel 7.0.0-31
 
-- **5.0 – 6.16**: Uses the `patch_cirrus` codec path
-- **6.17+**: Uses the new `cs420x` codec path (sound/hda/codecs/cirrus)
-
-## Prerequisites
-
-Install build tools, DKMS, kernel headers, and `wget` (used to download kernel source for building).
-
-### Arch Linux
+Mantenha um kernel anterior no GRUB e faça backup:
 
 ```bash
-sudo pacman -S dkms gcc linux-headers make wget
+sudo dkms status
+sudo cp -a /etc/modprobe.d /etc/modprobe.d.macbook12-audio-backup
+sudo apt install dkms build-essential gcc make curl dpkg-dev linux-headers-$(uname -r)
 ```
 
-### Fedora
+No Mint/Ubuntu, o instalador obtém automaticamente a fonte correspondente ao HWE ativo com `apt source linux-hwe-7.0` (ajustado à série do kernel), usando a árvore baixada na compilação. É necessário habilitar os repositórios `deb-src` e ter `dpkg-dev` instalado. Uma árvore explícita também pode ser informada com `--kernel-source DIR`.
 
 ```bash
-sudo dnf install dkms gcc kernel-devel make wget
-```
-
-### Ubuntu / Debian
-
-```bash
-sudo apt install dkms gcc linux-headers-generic make wget
-```
-
-## Step 1 — Clone This Repository
-
-```bash
-git clone https://github.com/juicecultus/macbook12-audio-driver.git
-cd macbook12-audio-driver
-```
-
-## Step 2 — Build and Install via DKMS (Recommended)
-
-DKMS will automatically recompile the module whenever you update your kernel.
-
-```bash
-# run as root or with sudo
-sudo ./install.cirrus.driver.sh -i
-```
-
-This will:
-1. Download the matching kernel source from kernel.org
-2. Extract and patch the HDA codec source
-3. Build the `snd-hda-codec-cs420x` module
-4. Register it with DKMS for automatic rebuilds on kernel updates
-
-After installation, **reboot** to load the new module:
-
-```bash
+chmod +x install.cirrus.driver.sh dkms.sh prepare.cirrus.driver.sh
+sudo ./install.cirrus.driver.sh --install
 sudo reboot
 ```
 
-### Alternative — Manual Build (without DKMS)
+O instalador prepara uma cópia da fonte HDA, substitui somente o codec Cirrus nessa cópia, compila o módulo DKMS e não substitui `snd_hda_intel`.
 
-If you prefer not to use DKMS:
-
-```bash
-# run as root or with sudo
-sudo ./install.cirrus.driver.sh
-sudo reboot
-```
-
-> **Note:** With a manual install you will need to rebuild the module every time your kernel updates.
-
-## Step 3 — Verify
-
-After rebooting, verify the module is loaded:
-
-```bash
-lsmod | grep snd_hda_codec_cs420x
-```
-
-Check DKMS status:
+## Verificação
 
 ```bash
 dkms status
-```
-
-Expected output:
-
-```
-macbook12-audio/0.1, <kernel-version>, x86_64: installed
-```
-
-Test audio output:
-
-```bash
-# List audio devices
+modinfo snd_hda_codec_cs420x | grep -E 'filename|version'
+cat /proc/asound/cards
 aplay -l
-
-# Play a test tone
-speaker-test -c 2
+wpctl status
+sudo dmesg | grep -Ei 'cs420|hda|snd|macbook|a1534|speaker|headphone'
 ```
 
-## Uninstalling
+Teste primeiro sem fone. Depois conecte e remova o fone durante uma reprodução curta e confirme fisicamente os dois caminhos.
 
-### DKMS
+## Volume e rollback
 
-```bash
-sudo ./install.cirrus.driver.sh -u
-```
+O caminho interno usa volume por software no PipeWire/WirePlumber. Copie apenas a variante correspondente em `contrib/wireplumber/` e reinicie o WirePlumber.
 
-### Manual
+Se houver falha, ruído ou regressão:
 
 ```bash
-sudo rm /lib/modules/$(uname -r)/updates/snd-hda-codec-cs420x.ko*
+sudo ./install.cirrus.driver.sh --uninstall
+sudo dkms remove -m macbook12-audio-driver -v 0.5.5-rev3 --all || true
 sudo depmod -a
+sudo update-initramfs -u
 sudo reboot
 ```
 
-## Troubleshooting
+## Estado de garantia
 
-- **No audio after install** — Reboot is required. Check `dmesg | grep snd` for errors.
-- **Module fails to build** — Ensure `linux-headers` matches your running kernel (`uname -r`). On Arch, install `linux-headers`; on Ubuntu, `linux-headers-generic`; on Fedora, `kernel-devel`.
-- **Kernel source download fails** — Ensure `wget` is installed and you have internet connectivity. The script downloads from `cdn.kernel.org`.
-- **DKMS not rebuilding on kernel update** — Verify DKMS status with `dkms status`. Re-run `sudo ./install.cirrus.driver.sh -i` if needed.
-- **Wrong audio device selected** — Use `pavucontrol` or `alsamixer` to select the correct output device.
-
-## How It Works
-
-The install script downloads the kernel source matching your running kernel, extracts the HDA sound subsystem, and replaces the stock Cirrus/CS420x codec driver with a patched version that adds proper support for the MacBook 12" audio hardware. On kernels 6.17+, the driver targets the new `sound/hda/codecs/cirrus/` path; on older kernels, it patches `sound/pci/hda/patch_cirrus.c`.
-
-## License
-
-This project inherits the license from the upstream Linux kernel HDA subsystem (GPL).
+A implementação funcional foi incorporada da referência pública `leifliddy/macbook12-audio-driver`, que declara suporte a MacBook9,1 e MacBook10,1. Este pacote local ainda requer confirmação no hardware do usuário; consulte `docs/TEST_PLAN.md`.

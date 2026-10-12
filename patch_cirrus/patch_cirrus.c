@@ -181,6 +181,7 @@ static void cs_automute(struct hda_codec *codec)
 				    AC_VERB_SET_GPIO_DATA, spec->gpio_data);
 	}
 }
+static void cs_automute_wrapper(struct hda_codec *codec, struct hda_jack_callback *jack) { cs_automute(codec); }
 
 static bool is_active_pin(struct hda_codec *codec, hda_nid_t nid)
 {
@@ -605,6 +606,8 @@ static int patch_cs420x(struct hda_codec *codec)
 
 	codec->patch_ops = cs_patch_ops;
 	spec->gen.automute_hook = cs_automute;
+ 	/* Deteccao hard-coded do P2 para restauracao de energia GPIO via wrapper */
+	snd_hda_jack_detect_enable_callback(codec, 0x10, cs_automute_wrapper);
 	codec->single_adc_amp = 1;
 
 	snd_hda_pick_fixup(codec, cs420x_models, cs420x_fixup_tbl,
@@ -786,6 +789,8 @@ static int patch_cs4208(struct hda_codec *codec)
 
 	codec->patch_ops = cs_patch_ops;
 	spec->gen.automute_hook = cs_automute;
+ 	/* Deteccao hard-coded do P2 para restauracao de energia GPIO via wrapper */
+	snd_hda_jack_detect_enable_callback(codec, 0x10, cs_automute_wrapper);
 	/* exclude NID 0x10 (HP) from output volumes due to different steps */
 	spec->gen.out_vol_mask = 1ULL << 0x10;
 
@@ -1191,6 +1196,8 @@ static int patch_cs4210(struct hda_codec *codec)
 
 	codec->patch_ops = cs421x_patch_ops;
 	spec->gen.automute_hook = cs_automute;
+ 	/* Deteccao hard-coded do P2 para restauracao de energia GPIO via wrapper */
+	snd_hda_jack_detect_enable_callback(codec, 0x10, cs_automute_wrapper);
 
 	snd_hda_pick_fixup(codec, cs421x_models, cs421x_fixup_tbl,
 			   cs421x_fixups);
