@@ -8,7 +8,6 @@
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/module.h>
-#include <linux/ctype.h>
 #include <sound/core.h>
 #include <linux/pci.h>
 #include <sound/tlv.h>
@@ -149,6 +148,7 @@ static void cs_automute(struct hda_codec *codec)
 				    AC_VERB_SET_GPIO_DATA, spec->gpio_data);
 	}
 }
+static void cs_automute_wrapper(struct hda_codec *codec, struct hda_jack_callback *jack) { cs_automute(codec); }
 
 static bool is_active_pin(struct hda_codec *codec, hda_nid_t nid)
 {
@@ -722,6 +722,8 @@ static void cs4208_fix_amp_caps(struct hda_codec *codec, hda_nid_t adc)
 	snd_hda_override_amp_caps(codec, adc, HDA_INPUT, caps);
 }
 
+static const struct hda_codec_ops cs_4208_codec_ops;
+
 static int cs4208_probe(struct hda_codec *codec)
 {
 	struct cs_spec *spec = codec->spec;
@@ -733,7 +735,7 @@ static int cs4208_probe(struct hda_codec *codec)
 	//mb9-specific
 	err = setup_a1534(codec);
 	err = play_a1534(codec);
-	hda_codec_to_driver(codec)->ops = &cs_4208_patch_ops_explicit;
+	hda_codec_to_driver(codec)->ops = &cs_4208_codec_ops;
 	spec->gen.pcm_playback_hook = cs_4208_playback_pcm_hook;
 	//end
 
@@ -766,6 +768,8 @@ static int cs_codec_probe(struct hda_codec *codec,
 	if (!spec)
 		return -ENOMEM;
 	spec->gen.automute_hook = cs_automute;
+ 	/* Deteccao hard-coded do P2 para restauracao de energia GPIO via wrapper */
+	snd_hda_jack_detect_enable_callback(codec, 0x10, cs_automute_wrapper);
 
 	if (spec->vendor_nid == CS4208_VENDOR_NID)
 		err = cs4208_probe(codec);
@@ -784,6 +788,20 @@ static const struct hda_codec_ops cs_codec_ops = {
 	.init = cs_init,
 	.unsol_event = snd_hda_jack_unsol_event,
 	.stream_pm = snd_hda_gen_stream_pm,
+};
+
+/* cs4208_probe() points the shared driver ops here, so this table must keep
+ * .probe and .remove: without them every codec re-probe after the first
+ * (reconfig, unbind/rebind) fails in hda_codec_driver_probe() with -EINVAL. */
+static const struct hda_codec_ops cs_4208_codec_ops = {
+	.probe = cs_codec_probe,
+	.remove = cs_4208_free_explicit,
+	.build_controls = cs_4208_build_controls_explicit,
+	.build_pcms = cs_4208_build_pcms_explicit,
+	.init = cs_4208_init_explicit,
+	.unsol_event = snd_hda_jack_unsol_event,
+	.stream_pm = snd_hda_gen_stream_pm,
+	.resume = cs_4208_resume,
 };
 
 /*
